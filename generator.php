@@ -7,7 +7,7 @@ if (version_compare(PHP_VERSION, '5.4', '<')) {
     throw new RuntimeException('php version requires >=5.4');
 }
 if ($argc == 1) {
-    exit(sprintf("Usage: %s EXTENSION_NAME [output_file_path]\n", pathinfo(__FILE__, PATHINFO_BASENAME)));
+    exit(sprintf("Usage: %s EXTENSION_NAME\n", pathinfo(__FILE__, PATHINFO_BASENAME)));
 }
 
 $extension = $argv[1];
@@ -77,15 +77,14 @@ foreach ($classes as $class) {
     $str .= "}\n";
     $result .= $str;
 }
-if (isset($argv[2])) {
-    $file = $argv[2];
-    if (is_writable($file)) {
-        file_put_contents($file, $result);
-    } else {
-        throw new RuntimeException(sprintf('file %s is not writable', $file));
-    }
+
+$dir  = dirname(__FILE__) . '/output/';
+$file = $dir . $extension . '.php';
+if (is_writable($dir)) {
+    file_put_contents($file, $result);
+    echo "save result to {$file}\n";
 } else {
-    echo $result;
+    throw new RuntimeException(sprintf('directory %s is not writable', $dir));
 }
 
 function getConstantStr($name, $value) {
