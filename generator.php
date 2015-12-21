@@ -6,6 +6,11 @@ set_exception_handler(function (Exception $e) {
 if (version_compare(PHP_VERSION, '5.4', '<')) {
     throw new RuntimeException('php version requires >=5.4');
 }
+
+if (!extension_loaded('reflection')) {
+    throw new RuntimeException('requires reflection extension');
+}
+
 if ($argc == 1) {
     exit(sprintf("Usage: %s EXTENSION_NAME\n", pathinfo(__FILE__, PATHINFO_BASENAME)));
 }
