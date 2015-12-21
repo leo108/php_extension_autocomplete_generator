@@ -24,7 +24,7 @@ $result    = "<?php\n";
 $ref       = new ReflectionExtension($extension);
 $constants = $ref->getConstants();
 foreach ($constants as $name => $value) {
-    $str = getConstantStr($name, $value);
+    $str = getDefineStr($name, $value);
     $result .= "$str\n";
 }
 
@@ -40,47 +40,57 @@ foreach ($functions as $func) {
 
 $classes = $ref->getClasses();
 foreach ($classes as $class) {
-    $str         = '';
+    $line        = array();
+    $ns          = $class->inNamespace() ? $class->getNamespaceName() : null;
     $parentClass = null;
-    if ($class->inNamespace()) {
-        $str .= 'namespace ' . $class->getNamespaceName() . "\n";
-    }
+    $className   = getClassName($class->getName(), $ns);
     if ($class->isTrait()) {
-        $title = 'trait ' . $class->getName();
+        $title = 'trait ' . $className;
     } else if ($class->isInterface()) {
-        $title = 'interface ' . $class->getName();
+        $title = 'interface ' . $className;
     } else {
         $modifiers   = Reflection::getModifierNames($class->getModifiers());
-        $title       = trim(join(' ', $modifiers) . ' class ' . $class->getName());
+        $title       = trim(join(' ', $modifiers) . ' class ' . $className);
         $parentClass = $class->getParentClass();
         if ($parentClass && !$parentClass->isInterface()) {
-            $title .= ' extends ' . $parentClass->getName();
+            $title .= ' extends ' . getClassName($parentClass->getName(), $ns);
         }
         $implements = $class->getInterfaceNames();
         if (!empty($implements)) {
-            $title .= ' implements ' . join(', ', $implements);
+            $title .= ' implements ' . join(', ', array_map(function ($implement) use ($ns) {
+                    return getClassName($implement, $ns);
+                }, $implements));
         }
     }
-    $str .= $title . " {\n";
+    $line[]    = $title . " {";
     $constants = $class->getConstants();
     foreach ($constants as $name => $value) {
-        $str .= "\t" . getConstantStr($name, $value) . "\n";
+        $line[] = "\t" . getConstantStr($name, $value);
     }
 
     $defaultProperties = $class->getDefaultProperties();
     foreach ($class->getProperties(ReflectionProperty::IS_PUBLIC | ReflectionProperty::IS_PROTECTED) as $property) {
         if (!isInheritProperty($property, $parentClass)) {
-            $str .= "\t" . getPropertyStr($property, $defaultProperties) . "\n";
+            $line[] = "\t" . getPropertyStr($property, $defaultProperties);
         }
     }
 
     foreach ($class->getMethods(ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED) as $method) {
         if (!isInheritMethod($method, $parentClass)) {
-            $str .= "\t" . getMethodStr($method, $class->isInterface()) . "\n";
+            $line[] .= "\t" . getMethodStr($method, $class->isInterface());
         }
     }
-    $str .= "}\n";
-    $result .= $str;
+    $line[] = "}";
+
+    if ($class->inNamespace()) {
+        foreach ($line as $k => $v) {
+            $line[$k] = "\t" . $v;
+        }
+        array_unshift($line, 'namespace ' . $ns . " {");
+        $line[] = "}";
+    }
+    $line[] = '';
+    $result .= join("\n", $line);
 }
 
 $dir  = dirname(__FILE__) . '/output/';
@@ -95,6 +105,15 @@ if (is_writable($dir)) {
 function getConstantStr($name, $value) {
     $value = var_export($value, true);
     return "const {$name} = {$value};";
+}
+
+function getDefineStr($name, $value) {
+    $value = var_export($value, true);
+    if (strpos($name, '\\') !== false) {
+        return "namespace{define('{$name}', {$value});}";
+    } else {
+        return "const {$name} = {$value};";
+    }
 }
 
 function getParamStr(ReflectionParameter $param) {
@@ -199,4 +218,21 @@ function isInheritMethod(ReflectionMethod $method, $parentClass = null) {
         return true;
     }
     return true;
+}
+
+function getClassName($origin, $ns = null) {
+    if (is_null($ns)) {
+        return $origin;
+    }
+    $ns  = str_replace('\\', '\\\\', $ns);
+    $str = trim(preg_replace(sprintf('~^%s\\\\~', $ns), '', $origin, 1, $count));
+    echo $str . "\n";
+    if ($count == 0) {
+        return '\\' . $origin;
+    }
+    if (empty($str)) {
+        $arr = explode('\\', $origin);
+        return array_pop($arr);
+    }
+    return $str;
 }
